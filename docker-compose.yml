@@ -1,0 +1,52 @@
+# ems-project/docker-compose.yml
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:latest
+    container_name: ems-mongo
+    ports:
+      - "27017:270117"
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ems-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ems-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - mongo
+      - ollama
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ems-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  ollama-data:
