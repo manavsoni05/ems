@@ -1,23 +1,23 @@
 // frontend/src/pages/HR/ManageAssets.tsx
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import {
     Box, Typography, CircularProgress, Alert, Button, Modal, Paper, TextField, MenuItem, Chip, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, IconButton,
-    Snackbar
+    Snackbar, Pagination, Select
 } from '@mui/material';
-import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
-// --- FIX: Change icon imports to named imports ---
 import {
     Add as AddIcon,
     AssignmentInd as AssignmentIndIcon,
     KeyboardReturn as KeyboardReturnIcon,
     Delete as DeleteIcon,
-    ArrowBack as ArrowBackIcon
+    ArrowUpward as ArrowUpwardIcon,
+    ArrowDownward as ArrowDownwardIcon,
+    UnfoldMore as UnfoldMoreIcon
 } from '@mui/icons-material';
-// --- END FIX ---
 import { useNavigate } from 'react-router-dom';
-import ConfirmationDialog from '../../components/ConfirmationDialog'; // Import ConfirmationDialog
+import ConfirmationDialog from '../../components/ConfirmationDialog';
+import { MotionBox } from '../../components/Motion';
 
 const fetchAssetsWithDetails = async () => (await api.get('/assets')).data;
 const fetchEmployees = async () => (await api.get('/employees')).data;
@@ -65,6 +65,12 @@ const ManageAssets = () => {
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+
+    // Pagination and sorting state
+    const [page, setPage] = useState(0);
+    const [pageSize, setPageSize] = useState(10);
+    const [sortField, setSortField] = useState<string>('asset_id');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
     const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
         if (reason === 'clickaway') {
@@ -203,64 +209,386 @@ const ManageAssets = () => {
         createMutation.mutate(newAssetData);
     };
 
-    const columns: GridColDef[] = [
-        { field: 'asset_id', headerName: 'Asset ID', width: 150 },
-        { field: 'asset_name', headerName: 'Name', flex: 1, minWidth: 150 },
-        { field: 'asset_type', headerName: 'Type', width: 120 },
-        {
-            field: 'status', headerName: 'Status', width: 120,
-            renderCell: (params) => (<Chip label={params.value} color={params.value === 'Available' ? 'success' : 'warning'} size="small" />)
-        },
-        {
-            field: 'allotted_to', headerName: 'Allotted To', width: 150,
-            valueGetter: (value, row) => row.allotment_info?.employee_id || '---'
-        },
-        {
-            field: 'actions', type: 'actions', headerName: 'Actions', width: 130,
-            getActions: ({ row }) => {
-                const actions = [];
-                
-                if (row.status === 'Available') {
-                    actions.push(<GridActionsCellItem icon={<AssignmentIndIcon />} label="Allot" onClick={() => handleOpenAllotModal(row)} />);
-                } else {
-                    actions.push(<GridActionsCellItem icon={<KeyboardReturnIcon />} label="Reclaim" onClick={() => handleReclaim(row.asset_id, row.asset_name)} />);
-                }
-                
-                actions.push(<GridActionsCellItem 
-                    icon={<DeleteIcon />} 
-                    label="Delete" 
-                    onClick={() => handleDelete(row.asset_id, row.asset_name)}
-                    disabled={deleteMutation.isPending && deleteMutation.variables === row.asset_id}
-                />);
-                
-                return actions;
-            }
+    // Sorting and pagination logic
+    const handleSort = (field: string) => {
+        if (sortField === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortOrder('asc');
         }
-    ];
+    };
+
+    const sortedAssets = useMemo(() => {
+        if (!assets) return [];
+        
+        const sorted = [...assets].sort((a: any, b: any) => {
+            let aValue = a[sortField];
+            let bValue = b[sortField];
+
+            if (sortField === 'allotted_to') {
+                aValue = a.allotment_info?.employee_id || '---';
+                bValue = b.allotment_info?.employee_id || '---';
+            }
+
+            aValue = aValue?.toString().toLowerCase() || '';
+            bValue = bValue?.toString().toLowerCase() || '';
+
+            if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+            if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        return sorted;
+    }, [assets, sortField, sortOrder]);
+
+    const paginatedAssets = useMemo(() => {
+        const startIndex = page * pageSize;
+        return sortedAssets.slice(startIndex, startIndex + pageSize);
+    }, [sortedAssets, page, pageSize]);
+
+    const totalPages = Math.ceil((sortedAssets?.length || 0) / pageSize);
+
+    const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
+        setPage(value - 1);
+    };
+
+    const handlePageSizeChange = (event: any) => {
+        setPageSize(event.target.value);
+        setPage(0);
+    };
+
+    const getStatusColor = (status: string): "success" | "warning" => {
+        return status === 'Available' ? 'success' : 'warning';
+    };
 
     if (isLoading) return <CircularProgress />;
     if (isError) return <Alert severity="error">Failed to fetch asset data.</Alert>;
 
     return (
-        <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <IconButton onClick={() => navigate(-1)} sx={{ mr: 1 }}><ArrowBackIcon /></IconButton>
-                    <Typography variant="h4" gutterBottom>Manage Company Assets</Typography>
+        <Box sx={{ maxWidth: '100%', overflow: 'hidden' }}>
+            {/* Page Header */}
+            <MotionBox
+                sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+            >
+                <Box>
+                    <Typography sx={{ fontSize: '28px', fontWeight: 700, color: '#212121', mb: 0.5 }}>
+                        Manage Company Assets
+                    </Typography>
+                    <Typography sx={{ fontSize: '14px', fontWeight: 400, color: '#999999' }}>
+                        Track and manage company assets and allotments
+                    </Typography>
                 </Box>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddModalOpen(true)}>Add Asset</Button>
-            </Box>
-            <Box component={Paper} sx={{ width: '100%' }}>
-                <DataGrid
-                    rows={assets || []}
-                    columns={columns}
-                    getRowId={(row) => row.asset_id}
-                    autoHeight
-                    initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 }}}}
-                    pageSizeOptions={[10, 25, 50]}
-                    loading={reclaimMutation.isPending || deleteMutation.isPending}
-                />
-            </Box>
+                <Button 
+                    variant="contained" 
+                    startIcon={<AddIcon />} 
+                    onClick={() => setAddModalOpen(true)}
+                    sx={{
+                        background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
+                        borderRadius: '8px',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        px: 3,
+                        boxShadow: '0 4px 12px rgba(90, 63, 255, 0.3)',
+                        '&:hover': {
+                            boxShadow: '0 6px 20px rgba(90, 63, 255, 0.4)',
+                            transform: 'translateY(-2px)',
+                        }
+                    }}
+                >
+                    Add Asset
+                </Button>
+            </MotionBox>
+
+            {/* Assets List */}
+            <MotionBox
+                component={Paper}
+                sx={{
+                    p: 3,
+                    background: '#FFFFFF',
+                    borderRadius: '16px',
+                    border: '1px solid #E8E8F0',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                        boxShadow: '0 12px 40px rgba(90, 63, 255, 0.08)',
+                    }
+                }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+            >
+                <Box>
+                    {/* Table Header */}
+                    <Box sx={{
+                        display: 'grid',
+                        gridTemplateColumns: '140px 1fr 120px 120px 150px 140px',
+                        gap: 2,
+                        px: 2,
+                        py: 1.5,
+                        backgroundColor: '#FAFAFA',
+                        borderRadius: '8px 8px 0 0',
+                        mb: 0,
+                    }}>
+                        <Box 
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                            onClick={() => handleSort('asset_id')}
+                        >
+                            <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                                Asset ID
+                            </Typography>
+                            {sortField === 'asset_id' ? (
+                                sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                            ) : (
+                                <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                            )}
+                        </Box>
+                        <Box 
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                            onClick={() => handleSort('asset_name')}
+                        >
+                            <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                                Name
+                            </Typography>
+                            {sortField === 'asset_name' ? (
+                                sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                            ) : (
+                                <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                            )}
+                        </Box>
+                        <Box 
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                            onClick={() => handleSort('asset_type')}
+                        >
+                            <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                                Type
+                            </Typography>
+                            {sortField === 'asset_type' ? (
+                                sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                            ) : (
+                                <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                            )}
+                        </Box>
+                        <Box 
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                            onClick={() => handleSort('status')}
+                        >
+                            <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                                Status
+                            </Typography>
+                            {sortField === 'status' ? (
+                                sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                            ) : (
+                                <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                            )}
+                        </Box>
+                        <Box 
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                            onClick={() => handleSort('allotted_to')}
+                        >
+                            <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                                Allotted To
+                            </Typography>
+                            {sortField === 'allotted_to' ? (
+                                sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                            ) : (
+                                <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                            )}
+                        </Box>
+                        <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                            Actions
+                        </Typography>
+                    </Box>
+
+                    {/* Asset List */}
+                    <Box>
+                        {paginatedAssets && paginatedAssets.length > 0 ? (
+                            paginatedAssets.map((asset: any) => (
+                                <Box
+                                    key={asset.asset_id}
+                                    sx={{
+                                        display: 'grid',
+                                        gridTemplateColumns: '140px 1fr 120px 120px 150px 140px',
+                                        gap: 2,
+                                        px: 2,
+                                        py: 2,
+                                        backgroundColor: '#FFFFFF',
+                                        borderBottom: '1px solid #F0F0F0',
+                                        alignItems: 'center',
+                                        transition: 'all 0.2s ease',
+                                        '&:hover': {
+                                            backgroundColor: '#F8F9FA',
+                                        }
+                                    }}
+                                >
+                                    {/* Asset ID */}
+                                    <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#5A3FFF' }}>
+                                        {asset.asset_id}
+                                    </Typography>
+
+                                    {/* Asset Name */}
+                                    <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#212121' }}>
+                                        {asset.asset_name}
+                                    </Typography>
+
+                                    {/* Asset Type */}
+                                    <Typography sx={{ fontSize: '13px', color: '#666666' }}>
+                                        {asset.asset_type}
+                                    </Typography>
+
+                                    {/* Status */}
+                                    <Box>
+                                        <Chip 
+                                            label={asset.status} 
+                                            color={getStatusColor(asset.status)} 
+                                            size="small"
+                                            sx={{ textTransform: 'capitalize', fontWeight: 600, fontSize: '11px' }}
+                                        />
+                                    </Box>
+
+                                    {/* Allotted To */}
+                                    <Typography sx={{ fontSize: '13px', color: '#666666' }}>
+                                        {asset.allotment_info?.employee_id || '---'}
+                                    </Typography>
+
+                                    {/* Actions */}
+                                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        {asset.status === 'Available' ? (
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleOpenAllotModal(asset)}
+                                                sx={{
+                                                    color: '#5A3FFF',
+                                                    '&:hover': {
+                                                        backgroundColor: 'rgba(90, 63, 255, 0.08)',
+                                                    }
+                                                }}
+                                                title="Allot Asset"
+                                            >
+                                                <AssignmentIndIcon sx={{ fontSize: 18 }} />
+                                            </IconButton>
+                                        ) : (
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleReclaim(asset.asset_id, asset.asset_name)}
+                                                disabled={reclaimMutation.isPending && assetToReclaimId === asset.asset_id}
+                                                sx={{
+                                                    color: '#FF9800',
+                                                    '&:hover': {
+                                                        backgroundColor: 'rgba(255, 152, 0, 0.08)',
+                                                    }
+                                                }}
+                                                title="Reclaim Asset"
+                                            >
+                                                {reclaimMutation.isPending && assetToReclaimId === asset.asset_id ? (
+                                                    <CircularProgress size={18} />
+                                                ) : (
+                                                    <KeyboardReturnIcon sx={{ fontSize: 18 }} />
+                                                )}
+                                            </IconButton>
+                                        )}
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => handleDelete(asset.asset_id, asset.asset_name)}
+                                            disabled={deleteMutation.isPending && assetToDeleteId === asset.asset_id}
+                                            sx={{
+                                                color: '#F44336',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                                                }
+                                            }}
+                                            title="Delete Asset"
+                                        >
+                                            {deleteMutation.isPending && assetToDeleteId === asset.asset_id ? (
+                                                <CircularProgress size={18} />
+                                            ) : (
+                                                <DeleteIcon sx={{ fontSize: 18 }} />
+                                            )}
+                                        </IconButton>
+                                    </Box>
+                                </Box>
+                            ))
+                        ) : (
+                            <Box sx={{ 
+                                textAlign: 'center', 
+                                py: 8,
+                                color: '#999999',
+                            }}>
+                                <Typography sx={{ fontSize: '14px' }}>
+                                    No assets found
+                                </Typography>
+                            </Box>
+                        )}
+                    </Box>
+
+                    {/* Pagination Controls */}
+                    <Box sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        mt: 2,
+                        pt: 2,
+                        borderTop: '1px solid #F0F0F0',
+                    }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography sx={{ fontSize: '13px', color: '#666666' }}>
+                                Rows per page:
+                            </Typography>
+                            <FormControl size="small">
+                                <Select
+                                    value={pageSize}
+                                    onChange={handlePageSizeChange}
+                                    sx={{
+                                        fontSize: '13px',
+                                        '& .MuiOutlinedInput-notchedOutline': {
+                                            borderColor: '#E8E8F0',
+                                        },
+                                        '&:hover .MuiOutlinedInput-notchedOutline': {
+                                            borderColor: '#5A3FFF',
+                                        },
+                                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                            borderColor: '#5A3FFF',
+                                        }
+                                    }}
+                                >
+                                    <MenuItem value={10}>10</MenuItem>
+                                    <MenuItem value={25}>25</MenuItem>
+                                    <MenuItem value={50}>50</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <Typography sx={{ fontSize: '13px', color: '#666666', ml: 2 }}>
+                                {page * pageSize + 1}-{Math.min((page + 1) * pageSize, sortedAssets.length)} of {sortedAssets.length}
+                            </Typography>
+                        </Box>
+
+                        <Pagination 
+                            count={totalPages} 
+                            page={page + 1} 
+                            onChange={handlePageChange}
+                            color="primary"
+                            shape="rounded"
+                            sx={{
+                                '& .MuiPaginationItem-root': {
+                                    color: '#666666',
+                                    fontWeight: 500,
+                                    '&.Mui-selected': {
+                                        backgroundColor: '#5A3FFF',
+                                        color: '#FFFFFF',
+                                        '&:hover': {
+                                            backgroundColor: '#4A2FEF',
+                                        }
+                                    },
+                                    '&:hover': {
+                                        backgroundColor: 'rgba(90, 63, 255, 0.08)',
+                                    }
+                                }
+                            }}
+                        />
+                    </Box>
+                </Box>
+            </MotionBox>
 
             {/* Allot Asset Modal */}
             <Modal open={allotModalOpen} onClose={() => setAllotModalOpen(false)}>

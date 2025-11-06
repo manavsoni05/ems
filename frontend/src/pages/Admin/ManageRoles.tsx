@@ -1,22 +1,24 @@
 // frontend/src/pages/Admin/ManageRoles.tsx
-import { useState, FormEvent, useMemo } from 'react'; // <-- Removed unused 'useEffect'
+import { useState, FormEvent, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import {
     Box, Typography, CircularProgress, Alert, Button, IconButton, Paper,
-    Modal, TextField, FormControlLabel, FormGroup,
-    Snackbar, Divider, Grid, // <-- Removed unused List, ListItem, ListItemText
-    Switch  // <-- Use Switch
+    TextField, FormControlLabel, FormGroup,
+    Snackbar, Divider, Grid, Chip, Pagination, Select, MenuItem, FormControl,
+    Dialog, DialogTitle, DialogContent, DialogActions,
+    Switch
 } from '@mui/material';
-import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import {
     Add as AddIcon,
     Edit as EditIcon,
     Delete as DeleteIcon,
-    ArrowBack as ArrowBackIcon
+    ArrowUpward as ArrowUpwardIcon,
+    ArrowDownward as ArrowDownwardIcon,
+    UnfoldMore as UnfoldMoreIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import ConfirmationDialog from '../../components/ConfirmationDialog';
+import { MotionBox } from '../../components/Motion';
 
 // --- API Functions (Unchanged) ---
 const fetchRoles = async () => (await api.get('/roles')).data;
@@ -79,7 +81,6 @@ const readToWrites: { [read: string]: string[] } = {
 
 const ManageRoles = () => {
     const queryClient = useQueryClient();
-    const navigate = useNavigate();
 
     // State
     const [modalOpen, setModalOpen] = useState(false);
@@ -89,6 +90,12 @@ const ManageRoles = () => {
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
     const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+
+    // Pagination and sorting state
+    const [page, setPage] = useState(0);
+    const [pageSize, setPageSize] = useState(10);
+    const [sortField, setSortField] = useState<string>('role_id');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
     // Queries
     const { data: roles, isLoading: isLoadingRoles, isError: isRolesError } = useQuery<Role[]>({
@@ -250,62 +257,227 @@ const ManageRoles = () => {
         setSnackbar({ ...snackbar, open: false });
     };
 
-    const columns: GridColDef[] = [
-        { field: 'role_id', headerName: 'Role ID', width: 200 },
-        { field: 'role_name', headerName: 'Role Name', flex: 1, minWidth: 200 },
-        {
-            field: 'permission_count',
-            headerName: 'Permissions',
-            width: 150,
-            valueGetter: (_, row) => row.permission_keys?.length || 0, // <-- Fixed unused 'value'
-            type: 'number',
-        },
-        {
-            field: 'actions',
-            type: 'actions',
-            headerName: 'Actions',
-            width: 100,
-            getActions: ({ row }) => [
-                <GridActionsCellItem icon={<EditIcon />} label="Edit" onClick={() => handleOpenEdit(row)} />,
-                <GridActionsCellItem
-                    icon={<DeleteIcon />}
-                    label="Delete"
-                    onClick={() => handleDeleteClick(row)}
-                    disabled={['admin', 'hr', 'employee'].includes(row.role_id)}
-                />,
-            ],
-        },
-    ];
+    // Sorting and pagination logic
+    const handleSort = (field: string) => {
+        if (sortField === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortOrder('asc');
+        }
+    };
+
+    const sortedRoles = useMemo(() => {
+        if (!roles) return [];
+        
+        const sorted = [...roles].sort((a: any, b: any) => {
+            let aValue = a[sortField];
+            let bValue = b[sortField];
+
+            if (sortField === 'permission_count') {
+                aValue = a.permission_keys?.length || 0;
+                bValue = b.permission_keys?.length || 0;
+            } else {
+                aValue = aValue?.toString().toLowerCase() || '';
+                bValue = bValue?.toString().toLowerCase() || '';
+            }
+
+            if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+            if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        return sorted;
+    }, [roles, sortField, sortOrder]);
+
+    const paginatedRoles = useMemo(() => {
+        const startIndex = page * pageSize;
+        return sortedRoles.slice(startIndex, startIndex + pageSize);
+    }, [sortedRoles, page, pageSize]);
+
+    const totalPages = Math.ceil((sortedRoles?.length || 0) / pageSize);
+
+    const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
+        setPage(value - 1);
+    };
+
+    const handlePageSizeChange = (event: any) => {
+        setPageSize(event.target.value);
+        setPage(0);
+    };
 
     if (isLoadingRoles || isLoadingPerms) return <CircularProgress />;
     if (isRolesError || isPermsError) return <Alert severity="error">Failed to load role management data.</Alert>;
 
     return (
-        <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <IconButton onClick={() => navigate(-1)} sx={{ mr: 1 }}><ArrowBackIcon /></IconButton>
-                    <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>Manage Roles & Permissions</Typography>
+        <Box sx={{ p: 4 }}>
+            <MotionBox
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+                <Box>
+                    <Typography variant="h4" sx={{ fontSize: '28px', fontWeight: 600, color: '#212121', mb: 0.5 }}>
+                        Roles & Permissions
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#999999', fontSize: '14px' }}>
+                        Manage system roles and permission assignments
+                    </Typography>
                 </Box>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate}>Create New Role</Button>
+                <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={handleOpenCreate}
+                    sx={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: '#fff',
+                        '&:hover': {
+                            background: 'linear-gradient(135deg, #5568d3 0%, #633d8f 100%)',
+                        },
+                    }}
+                >
+                    Create New Role
+                </Button>
+            </MotionBox>
+
+            {/* Table Header */}
+            <Box
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '200px 1fr 150px 100px',
+                    gap: 2,
+                    p: 2,
+                    borderBottom: '2px solid #e0e0e0',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '8px 8px 0 0',
+                    fontWeight: 600,
+                    color: '#666666',
+                    fontSize: '13px',
+                }}
+            >
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('role_id')}>
+                    Role ID
+                    {sortField === 'role_id' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('role_name')}>
+                    Role Name
+                    {sortField === 'role_name' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('permission_count')}>
+                    Permissions
+                    {sortField === 'permission_count' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box>Actions</Box>
             </Box>
 
-            <Box component={Paper} sx={{ width: '100%' }}>
-                <DataGrid
-                    rows={roles || []}
-                    columns={columns}
-                    getRowId={(row) => row.role_id}
-                    autoHeight
-                    initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-                    pageSizeOptions={[10, 25]}
+            {/* Roles List */}
+            {paginatedRoles.map((row: any) => (
+                <Box
+                    key={row.role_id}
+                    sx={{
+                        display: 'grid',
+                        gridTemplateColumns: '200px 1fr 150px 100px',
+                        gap: 2,
+                        p: 2,
+                        borderBottom: '1px solid #e0e0e0',
+                        '&:hover': { backgroundColor: '#f9f9f9' },
+                        alignItems: 'center',
+                        fontSize: '14px',
+                        color: '#212121',
+                    }}
+                >
+                    <Box>{row.role_id}</Box>
+                    <Box>{row.role_name}</Box>
+                    <Box>
+                        <Chip
+                            label={`${row.permission_keys?.length || 0} permissions`}
+                            size="small"
+                            sx={{
+                                backgroundColor: '#e3f2fd',
+                                color: '#1976d2',
+                                fontWeight: 500,
+                                fontSize: '12px',
+                            }}
+                        />
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <IconButton size="small" onClick={() => handleOpenEdit(row)} sx={{ color: '#5A3FFF' }}>
+                            <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton 
+                            size="small" 
+                            onClick={() => handleDeleteClick(row)}
+                            sx={{ color: '#f44336' }}
+                            disabled={['admin', 'hr', 'employee'].includes(row.role_id)}
+                        >
+                            <DeleteIcon fontSize="small" />
+                        </IconButton>
+                    </Box>
+                </Box>
+            ))}
+
+            {/* Pagination */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 3, p: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#666666' }}>
+                        Rows per page:
+                    </Typography>
+                    <FormControl size="small">
+                        <Select value={pageSize} onChange={handlePageSizeChange} sx={{ minWidth: 70 }}>
+                            <MenuItem value={10}>10</MenuItem>
+                            <MenuItem value={25}>25</MenuItem>
+                            <MenuItem value={50}>50</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <Typography variant="body2" sx={{ color: '#666666' }}>
+                        Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, sortedRoles.length)} of {sortedRoles.length}
+                    </Typography>
+                </Box>
+                <Pagination
+                    count={totalPages}
+                    page={page + 1}
+                    onChange={handlePageChange}
+                    shape="rounded"
+                    sx={{
+                        '& .MuiPaginationItem-root.Mui-selected': {
+                            backgroundColor: '#5A3FFF',
+                            color: '#fff',
+                        },
+                    }}
                 />
             </Box>
 
             {/* Create/Edit Modal */}
-            <Modal open={modalOpen} onClose={handleCloseModal}>
-                <Paper sx={{ p: 3, position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: { xs: '90%', md: 800 }, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="h6" gutterBottom>{isEditMode ? 'Edit Role' : 'Create New Role'}</Typography>
-                    <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Dialog
+                open={modalOpen}
+                onClose={handleCloseModal}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 2,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                        maxHeight: '90vh',
+                    },
+                }}
+            >
+                <DialogTitle sx={{ fontSize: '20px', fontWeight: 600, color: '#212121', pb: 1 }}>
+                    {isEditMode ? 'Edit Role' : 'Create New Role'}
+                </DialogTitle>
+                <DialogContent sx={{ pt: 2 }}>
+                    <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column' }}>
                         <TextField
                             label="Role ID"
                             value={formData.role_id}
@@ -326,7 +498,7 @@ const ManageRoles = () => {
                         <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>Assign Permissions</Typography>
                         
                         {/* --- (Goal 1 & 2) Updated UI Rendering --- */}
-                        <Box sx={{ overflowY: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+                        <Box sx={{ overflowY: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2, maxHeight: '400px' }}>
                             <Grid container spacing={2}>
                                 {Object.entries(groupedPermissions)
                                     // Sort groups alphabetically (e.g., asset, employee, leave)
@@ -390,13 +562,29 @@ const ManageRoles = () => {
                             </Grid>
                         </Box>
                         {/* --- End Updated UI --- */}
-
-                        <Button type="submit" variant="contained" sx={{ mt: 3 }} disabled={createMutation.isPending || updateMutation.isPending}>
-                            {createMutation.isPending || updateMutation.isPending ? <CircularProgress size={24} /> : (isEditMode ? 'Save Changes' : 'Create Role')}
-                        </Button>
                     </Box>
-                </Paper>
-            </Modal>
+                </DialogContent>
+                <DialogActions sx={{ p: 2, pt: 1 }}>
+                    <Button onClick={handleCloseModal} sx={{ color: '#666666' }}>
+                        Cancel
+                    </Button>
+                    <Button
+                        type="submit"
+                        onClick={handleSubmit}
+                        variant="contained"
+                        disabled={createMutation.isPending || updateMutation.isPending}
+                        sx={{
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: '#fff',
+                            '&:hover': {
+                                background: 'linear-gradient(135deg, #5568d3 0%, #633d8f 100%)',
+                            },
+                        }}
+                    >
+                        {createMutation.isPending || updateMutation.isPending ? <CircularProgress size={24} /> : (isEditMode ? 'Save Changes' : 'Create Role')}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             {/* Delete Confirmation */}
             <ConfirmationDialog

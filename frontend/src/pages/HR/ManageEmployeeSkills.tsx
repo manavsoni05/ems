@@ -1,18 +1,19 @@
 // frontend/src/pages/HR/ManageEmployeeSkills.tsx
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import {
-  Box, Typography, CircularProgress, Alert, Button, Modal, Paper, TextField, MenuItem, IconButton,
-  Snackbar // Added Snackbar
+  Box, Typography, CircularProgress, Alert, Button, TextField, MenuItem, IconButton,
+  Snackbar, Pagination, Select, FormControl, Dialog, DialogTitle, DialogContent, DialogActions, Chip
 } from '@mui/material';
-import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
-import { useNavigate } from 'react-router-dom';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ConfirmationDialog from '../../components/ConfirmationDialog'; // Import ConfirmationDialog
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
+import { MotionBox } from '../../components/Motion';
 
 // API Functions
 const fetchAllSkills = async () => (await api.get('/employee-skills')).data;
@@ -25,7 +26,6 @@ const proficiencyLevels = ['Beginner', 'Intermediate', 'Expert'];
 
 const ManageEmployeeSkills = () => {
     const queryClient = useQueryClient();
-    const navigate = useNavigate();
 
     // Modals State
     const [editModalOpen, setEditModalOpen] = useState(false);
@@ -42,6 +42,12 @@ const ManageEmployeeSkills = () => {
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+
+    // Pagination and sorting state
+    const [page, setPage] = useState(0);
+    const [pageSize, setPageSize] = useState(10);
+    const [sortField, setSortField] = useState<string>('employee_id');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
     const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
         if (reason === 'clickaway') return;
@@ -132,26 +138,58 @@ const ManageEmployeeSkills = () => {
         setEditModalOpen(true);
     };
 
-    const columns: GridColDef[] = [
-        { field: 'employee_id', headerName: 'Employee ID', width: 130 },
-        { field: 'first_name', headerName: 'First Name', flex: 1, minWidth: 120 },
-        { field: 'last_name', headerName: 'Last Name', flex: 1, minWidth: 120 },
-        { field: 'skill_name', headerName: 'Skill', flex: 1, minWidth: 150 },
-        { field: 'proficiency_level', headerName: 'Proficiency', width: 150 },
-        {
-            field: 'actions', type: 'actions', headerName: 'Actions', width: 100,
-            getActions: ({ row }) => [
-                <GridActionsCellItem icon={<EditIcon />} label="Edit" onClick={() => openEditModal(row)} />,
-                // Pass relevant info to handleDelete
-                <GridActionsCellItem
-                  icon={<DeleteIcon />}
-                  label="Delete"
-                  onClick={() => handleDelete(row.employee_skill_id, `${row.first_name} ${row.last_name}`, row.skill_name)}
-                  disabled={deleteMutation.isPending && deleteMutation.variables === row.employee_skill_id}
-                 />
-            ]
-        },
-    ];
+    // Sorting and pagination logic
+    const handleSort = (field: string) => {
+        if (sortField === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortOrder('asc');
+        }
+    };
+
+    const sortedSkills = useMemo(() => {
+        if (!skills) return [];
+        
+        const sorted = [...skills].sort((a: any, b: any) => {
+            let aValue = a[sortField];
+            let bValue = b[sortField];
+
+            aValue = aValue?.toString().toLowerCase() || '';
+            bValue = bValue?.toString().toLowerCase() || '';
+
+            if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+            if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        return sorted;
+    }, [skills, sortField, sortOrder]);
+
+    const paginatedSkills = useMemo(() => {
+        const startIndex = page * pageSize;
+        return sortedSkills.slice(startIndex, startIndex + pageSize);
+    }, [sortedSkills, page, pageSize]);
+
+    const totalPages = Math.ceil((sortedSkills?.length || 0) / pageSize);
+
+    const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
+        setPage(value - 1);
+    };
+
+    const handlePageSizeChange = (event: any) => {
+        setPageSize(event.target.value);
+        setPage(0);
+    };
+
+    const getProficiencyColor = (level: string) => {
+        switch (level.toLowerCase()) {
+            case 'expert': return { bg: '#e8f5e9', text: '#2e7d32' };
+            case 'intermediate': return { bg: '#fff3e0', text: '#ef6c00' };
+            case 'beginner': return { bg: '#e3f2fd', text: '#1976d2' };
+            default: return { bg: '#f5f5f5', text: '#666666' };
+        }
+    };
 
     const getErrorMessage = (error: any, defaultMessage: string = "An error occurred") => {
         if (!error) return defaultMessage;
@@ -164,65 +202,293 @@ const ManageEmployeeSkills = () => {
 
 
     return (
-        <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <IconButton onClick={() => navigate(-1)} sx={{ mr: 1 }}><ArrowBackIcon /></IconButton>
-                    <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>Manage Employee Skills</Typography>
+        <Box sx={{ p: 4 }}>
+            <MotionBox
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+                <Box>
+                    <Typography variant="h4" sx={{ fontSize: '28px', fontWeight: 600, color: '#212121', mb: 0.5 }}>
+                        Employee Skills
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#999999', fontSize: '14px' }}>
+                        Manage employee skill proficiencies
+                    </Typography>
                 </Box>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddModalOpen(true)}>Add Skill</Button>
+                <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setAddModalOpen(true)}
+                    sx={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: '#fff',
+                        '&:hover': {
+                            background: 'linear-gradient(135deg, #5568d3 0%, #633d8f 100%)',
+                        },
+                    }}
+                >
+                    Add Skill
+                </Button>
+            </MotionBox>
+
+            {/* Table Header */}
+            <Box
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '180px 130px 1fr 1fr 1fr 150px 100px',
+                    gap: 2,
+                    p: 2,
+                    borderBottom: '2px solid #e0e0e0',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '8px 8px 0 0',
+                    fontWeight: 600,
+                    color: '#666666',
+                    fontSize: '13px',
+                }}
+            >
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('employee_skill_id')}>
+                    Skill ID
+                    {sortField === 'employee_skill_id' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('employee_id')}>
+                    Employee ID
+                    {sortField === 'employee_id' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('first_name')}>
+                    First Name
+                    {sortField === 'first_name' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('last_name')}>
+                    Last Name
+                    {sortField === 'last_name' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('skill_name')}>
+                    Skill Name
+                    {sortField === 'skill_name' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => handleSort('proficiency_level')}>
+                    Proficiency
+                    {sortField === 'proficiency_level' ? (
+                        sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, ml: 0.5, color: '#5A3FFF' }} />
+                    ) : (
+                        <UnfoldMoreIcon sx={{ fontSize: 14, ml: 0.5, color: '#999999' }} />
+                    )}
+                </Box>
+                <Box>Actions</Box>
             </Box>
 
-            <Box component={Paper} sx={{ width: '100%' }}>
-                 <DataGrid
-                    rows={skills || []}
-                    columns={columns}
-                    getRowId={(row) => row.employee_skill_id}
-                    loading={deleteMutation.isPending}
-                    autoHeight
-                    initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 }}}}
-                    pageSizeOptions={[10, 25, 50]}
+            {/* Skills List */}
+            {paginatedSkills.map((row: any) => {
+                const colors = getProficiencyColor(row.proficiency_level);
+                return (
+                    <Box
+                        key={row.employee_skill_id}
+                        sx={{
+                            display: 'grid',
+                            gridTemplateColumns: '180px 130px 1fr 1fr 1fr 150px 100px',
+                            gap: 2,
+                            p: 2,
+                            borderBottom: '1px solid #e0e0e0',
+                            '&:hover': { backgroundColor: '#f9f9f9' },
+                            alignItems: 'center',
+                            fontSize: '14px',
+                            color: '#212121',
+                        }}
+                    >
+                        <Box>{row.employee_skill_id}</Box>
+                        <Box>{row.employee_id}</Box>
+                        <Box>{row.first_name}</Box>
+                        <Box>{row.last_name}</Box>
+                        <Box>{row.skill_name}</Box>
+                        <Box>
+                            <Chip
+                                label={row.proficiency_level}
+                                size="small"
+                                sx={{
+                                    backgroundColor: colors.bg,
+                                    color: colors.text,
+                                    fontWeight: 500,
+                                    fontSize: '12px',
+                                }}
+                            />
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <IconButton size="small" onClick={() => openEditModal(row)} sx={{ color: '#5A3FFF' }}>
+                                <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton 
+                                size="small" 
+                                onClick={() => handleDelete(row.employee_skill_id, `${row.first_name} ${row.last_name}`, row.skill_name)} 
+                                sx={{ color: '#f44336' }}
+                                disabled={deleteMutation.isPending && deleteMutation.variables === row.employee_skill_id}
+                            >
+                                <DeleteIcon fontSize="small" />
+                            </IconButton>
+                        </Box>
+                    </Box>
+                );
+            })}
+
+            {/* Pagination */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 3, p: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#666666' }}>
+                        Rows per page:
+                    </Typography>
+                    <FormControl size="small">
+                        <Select value={pageSize} onChange={handlePageSizeChange} sx={{ minWidth: 70 }}>
+                            <MenuItem value={10}>10</MenuItem>
+                            <MenuItem value={25}>25</MenuItem>
+                            <MenuItem value={50}>50</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <Typography variant="body2" sx={{ color: '#666666' }}>
+                        Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, sortedSkills.length)} of {sortedSkills.length}
+                    </Typography>
+                </Box>
+                <Pagination
+                    count={totalPages}
+                    page={page + 1}
+                    onChange={handlePageChange}
+                    shape="rounded"
+                    sx={{
+                        '& .MuiPaginationItem-root.Mui-selected': {
+                            backgroundColor: '#5A3FFF',
+                            color: '#fff',
+                        },
+                    }}
                 />
             </Box>
 
             {/* Add Skill Modal */}
-            <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)}>
-                <Paper sx={{ p: 3, position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 400 }}>
-                    <Typography variant="h6" gutterBottom>Add New Skill</Typography>
-                    <Box component="form" onSubmit={handleAddSubmit}>
-                        <TextField select fullWidth label="Select Employee" value={addFormData.employee_id} onChange={(e) => setAddFormData({ ...addFormData, employee_id: e.target.value })} margin="normal" required>
+            <Dialog
+                open={addModalOpen}
+                onClose={() => setAddModalOpen(false)}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 2,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                    },
+                }}
+            >
+                <DialogTitle sx={{ fontSize: '20px', fontWeight: 600, color: '#212121', pb: 1 }}>
+                    Add New Skill
+                </DialogTitle>
+                <DialogContent sx={{ pt: 2 }}>
+                    <Box component="form" onSubmit={handleAddSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                        <TextField select fullWidth label="Select Employee" value={addFormData.employee_id} onChange={(e) => setAddFormData({ ...addFormData, employee_id: e.target.value })} required>
                             <MenuItem value="" disabled><em>Select an employee...</em></MenuItem>
                             {employees?.map((emp: any) => (<MenuItem key={emp.employee_id} value={emp.employee_id}>{emp.first_name} {emp.last_name} ({emp.employee_id})</MenuItem>))}
                         </TextField>
-                        <TextField label="Skill Name" fullWidth margin="normal" value={addFormData.skill_name} onChange={(e) => setAddFormData({ ...addFormData, skill_name: e.target.value })} required />
-                        <TextField select fullWidth label="Proficiency" value={addFormData.proficiency_level} onChange={(e) => setAddFormData({ ...addFormData, proficiency_level: e.target.value })} margin="normal" required>
+                        <TextField label="Skill Name" fullWidth value={addFormData.skill_name} onChange={(e) => setAddFormData({ ...addFormData, skill_name: e.target.value })} required />
+                        <TextField select fullWidth label="Proficiency" value={addFormData.proficiency_level} onChange={(e) => setAddFormData({ ...addFormData, proficiency_level: e.target.value })} required>
                             {proficiencyLevels.map(level => (<MenuItem key={level} value={level}>{level}</MenuItem>))}
                         </TextField>
-                        <Button type="submit" variant="contained" sx={{ mt: 2 }} disabled={createMutation.isPending}>
-                            {createMutation.isPending ? <CircularProgress size={24} /> : 'Add Skill'}
-                        </Button>
-                        {createMutation.isError && <Alert severity="error" sx={{mt: 2}}>{getErrorMessage(createMutation.error, "Failed to add skill")}</Alert>}
                     </Box>
-                </Paper>
-            </Modal>
+                </DialogContent>
+                <DialogActions sx={{ p: 2, pt: 1 }}>
+                    <Button onClick={() => setAddModalOpen(false)} sx={{ color: '#666666' }}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleAddSubmit}
+                        variant="contained"
+                        disabled={createMutation.isPending}
+                        sx={{
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: '#fff',
+                            '&:hover': {
+                                background: 'linear-gradient(135deg, #5568d3 0%, #633d8f 100%)',
+                            },
+                        }}
+                    >
+                        {createMutation.isPending ? <CircularProgress size={24} /> : 'Add Skill'}
+                    </Button>
+                </DialogActions>
+                {createMutation.isError && (
+                    <Box sx={{ px: 2, pb: 2 }}>
+                        <Alert severity="error">
+                            {getErrorMessage(createMutation.error, "Failed to add skill")}
+                        </Alert>
+                    </Box>
+                )}
+            </Dialog>
 
             {/* Edit Skill Modal */}
             {editFormData && (
-                <Modal open={editModalOpen} onClose={() => setEditModalOpen(false)}>
-                    <Paper sx={{ p: 3, position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 400 }}>
-                        <Typography variant="h6">Edit Skill for {editFormData.first_name} {editFormData.last_name}</Typography>
-                        <Box component="form" onSubmit={handleEditSubmit}>
-                            <TextField label="Skill Name" fullWidth margin="normal" value={editFormData.skill_name} disabled />
-                            <TextField select fullWidth label="Proficiency" value={editFormData.proficiency_level} onChange={(e) => setEditFormData({...editFormData, proficiency_level: e.target.value})} margin="normal" required>
+                <Dialog
+                    open={editModalOpen}
+                    onClose={() => setEditModalOpen(false)}
+                    maxWidth="sm"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            borderRadius: 2,
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                        },
+                    }}
+                >
+                    <DialogTitle sx={{ fontSize: '20px', fontWeight: 600, color: '#212121', pb: 1 }}>
+                        Edit Skill for {editFormData.first_name} {editFormData.last_name}
+                    </DialogTitle>
+                    <DialogContent sx={{ pt: 2 }}>
+                        <Box component="form" onSubmit={handleEditSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                            <TextField label="Skill Name" fullWidth value={editFormData.skill_name} disabled />
+                            <TextField select fullWidth label="Proficiency" value={editFormData.proficiency_level} onChange={(e) => setEditFormData({...editFormData, proficiency_level: e.target.value})} required>
                                 {proficiencyLevels.map(level => (<MenuItem key={level} value={level}>{level}</MenuItem>))}
                             </TextField>
-                            <Button type="submit" variant="contained" sx={{ mt: 2 }} disabled={updateMutation.isPending}>
-                                {updateMutation.isPending ? <CircularProgress size={24} /> : 'Save Changes'}
-                            </Button>
-                            {updateMutation.isError && <Alert severity="error" sx={{mt: 2}}>{getErrorMessage(updateMutation.error, "Failed to update skill")}</Alert>}
                         </Box>
-                    </Paper>
-                </Modal>
+                    </DialogContent>
+                    <DialogActions sx={{ p: 2, pt: 1 }}>
+                        <Button onClick={() => setEditModalOpen(false)} sx={{ color: '#666666' }}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleEditSubmit}
+                            variant="contained"
+                            disabled={updateMutation.isPending}
+                            sx={{
+                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                color: '#fff',
+                                '&:hover': {
+                                    background: 'linear-gradient(135deg, #5568d3 0%, #633d8f 100%)',
+                                },
+                            }}
+                        >
+                            {updateMutation.isPending ? <CircularProgress size={24} /> : 'Save Changes'}
+                        </Button>
+                    </DialogActions>
+                    {updateMutation.isError && (
+                        <Box sx={{ px: 2, pb: 2 }}>
+                            <Alert severity="error">
+                                {getErrorMessage(updateMutation.error, "Failed to update skill")}
+                            </Alert>
+                        </Box>
+                    )}
+                </Dialog>
             )}
 
             {/* --- Snackbar for Notifications --- */}

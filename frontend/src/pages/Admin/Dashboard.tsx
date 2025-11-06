@@ -4,7 +4,7 @@ import { useQueries, useMutation, useQueryClient, useQuery } from '@tanstack/rea
 import api, { API_BASE_URL } from '../../services/api';
 import {
     Box, Typography, Grid, Paper, CircularProgress, Button, Avatar, ListItemText, List, ListItem, ListItemAvatar,
-    Snackbar, Alert
+    Snackbar, Alert, IconButton, Pagination, Select, MenuItem, FormControl
 } from '@mui/material';
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +18,12 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import GroupIcon from '@mui/icons-material/Group';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import { useAuth } from '../../hooks/hooks/useAuth';
 import Notifications from '../../components/Notifications';
 import { MotionBox } from '../../components/Motion';
@@ -56,6 +62,34 @@ const AdminDashboard = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+
+  // Calendar state
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  // Employee list pagination and sorting state
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortField, setSortField] = useState<string>('employee_id');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    return { daysInMonth, startingDayOfWeek };
+  };
+
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
+  };
 
   const handleSnackbarClose = (_event?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
@@ -292,6 +326,62 @@ const AdminDashboard = () => {
     },
   ];
 
+  // Sorting and pagination logic for employee list
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedEmployees = useMemo(() => {
+    if (!employees) return [];
+    
+    const sorted = [...employees].sort((a: any, b: any) => {
+      let aValue = a[sortField];
+      let bValue = b[sortField];
+
+      // Handle reports_to field specially
+      if (sortField === 'reports_to') {
+        aValue = employeeMap.get(a.reports_to) || a.reports_to || '';
+        bValue = employeeMap.get(b.reports_to) || b.reports_to || '';
+      }
+
+      // Handle name field (combination of first and last name)
+      if (sortField === 'name') {
+        aValue = `${a.first_name} ${a.last_name}`.toLowerCase();
+        bValue = `${b.first_name} ${b.last_name}`.toLowerCase();
+      } else {
+        aValue = aValue?.toString().toLowerCase() || '';
+        bValue = bValue?.toString().toLowerCase() || '';
+      }
+
+      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [employees, sortField, sortOrder, employeeMap]);
+
+  const paginatedEmployees = useMemo(() => {
+    const startIndex = page * pageSize;
+    return sortedEmployees.slice(startIndex, startIndex + pageSize);
+  }, [sortedEmployees, page, pageSize]);
+
+  const totalPages = Math.ceil((sortedEmployees?.length || 0) / pageSize);
+
+  const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
+    setPage(value - 1);
+  };
+
+  const handlePageSizeChange = (event: any) => {
+    setPageSize(event.target.value);
+    setPage(0);
+  };
+
   if (isLoading) return <Box sx={{display: 'flex', justifyContent: 'center', mt: 4}}><CircularProgress /></Box>;
 
   return (
@@ -379,195 +469,191 @@ const AdminDashboard = () => {
         </Box>
       </MotionBox>
 
-      {/* Today's Attendance Stats */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <MotionBox
-            component={Paper}
-            sx={{
-              p: 3,
-              textAlign: 'center',
-              background: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1px solid #E0E0E0',
+      {/* Today's Attendance Stats - Professional Horizontal Layout */}
+      <MotionBox
+        component={Paper}
+        sx={{
+          mb: 4,
+          background: 'linear-gradient(135deg, #FFFFFF 0%, #F8F9FF 100%)',
+          borderRadius: '16px',
+          border: '1px solid #E8E8F0',
+          overflow: 'hidden',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            boxShadow: '0 12px 40px rgba(90, 63, 255, 0.08)',
+          }
+        }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Box sx={{ p: 3, borderBottom: '1px solid #F0F0F5' }}>
+          <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#212121' }}>
+            Today's Overview
+          </Typography>
+          <Typography sx={{ fontSize: '13px', color: '#757575', mt: 0.5 }}>
+            Real-time attendance statistics
+          </Typography>
+        </Box>
+        
+        <Grid container>
+          <Grid item xs={12} sm={6} md={3}>
+            <Box sx={{ 
+              p: 3, 
+              borderRight: { xs: 'none', md: '1px solid #F0F0F5' },
+              borderBottom: { xs: '1px solid #F0F0F5', sm: 'none' },
               transition: 'all 0.3s ease',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-                borderColor: '#5A3FFF',
+                background: 'rgba(90, 63, 255, 0.02)',
               }
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              width: 56,
-              height: 56,
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
-              margin: '0 auto 16px',
-              boxShadow: '0 4px 12px rgba(90, 63, 255, 0.2)',
             }}>
-              <GroupIcon sx={{ fontSize: 28, color: '#FFFFFF' }} />
-            </Box>
-            <Typography sx={{ color: '#999999', fontSize: '13px', fontWeight: 500, mb: 1, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Total Employees
-            </Typography>
-            <Typography sx={{ fontSize: '32px', fontWeight: 700, color: '#212121' }}>
-              {employees?.length || 0}
-            </Typography>
-          </MotionBox>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <MotionBox
-            component={Paper}
-            sx={{
-              p: 3,
-              textAlign: 'center',
-              background: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1px solid #E0E0E0',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-                borderColor: '#4CAF50',
-              }
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              width: 56,
-              height: 56,
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
-              margin: '0 auto 16px',
-              boxShadow: '0 4px 12px rgba(76, 175, 80, 0.2)',
-            }}>
-              <CheckCircleOutlineIcon sx={{ fontSize: 28, color: '#FFFFFF' }} />
-            </Box>
-            <Typography sx={{ color: '#999999', fontSize: '13px', fontWeight: 500, mb: 1, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Present Today
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-              <Typography sx={{ fontSize: '32px', fontWeight: 700, color: '#212121' }}>
-                {todayAttendanceStats.present}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ 
+                  width: 48, 
+                  height: 48, 
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 16px rgba(90, 63, 255, 0.25)',
+                }}>
+                  <GroupIcon sx={{ fontSize: 24, color: '#FFFFFF' }} />
+                </Box>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#212121', lineHeight: 1 }}>
+                    {employees?.length || 0}
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#757575', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Total Employees
               </Typography>
-              <TrendingUpIcon sx={{ fontSize: 24, color: '#4CAF50' }} />
             </Box>
-          </MotionBox>
-        </Grid>
+          </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <MotionBox
-            component={Paper}
-            sx={{
-              p: 3,
-              textAlign: 'center',
-              background: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1px solid #E0E0E0',
+          <Grid item xs={12} sm={6} md={3}>
+            <Box sx={{ 
+              p: 3, 
+              borderRight: { xs: 'none', md: '1px solid #F0F0F5' },
+              borderBottom: { xs: '1px solid #F0F0F5', md: 'none' },
               transition: 'all 0.3s ease',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-                borderColor: '#FF9800',
+                background: 'rgba(76, 175, 80, 0.02)',
               }
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              width: 56,
-              height: 56,
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #FF9800 0%, #FFB74D 100%)',
-              margin: '0 auto 16px',
-              boxShadow: '0 4px 12px rgba(255, 152, 0, 0.2)',
             }}>
-              <EventAvailableIcon sx={{ fontSize: 28, color: '#FFFFFF' }} />
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ 
+                  width: 48, 
+                  height: 48, 
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 16px rgba(76, 175, 80, 0.25)',
+                }}>
+                  <CheckCircleOutlineIcon sx={{ fontSize: 24, color: '#FFFFFF' }} />
+                </Box>
+                <Box sx={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#212121', lineHeight: 1 }}>
+                    {todayAttendanceStats.present}
+                  </Typography>
+                  <TrendingUpIcon sx={{ fontSize: 20, color: '#4CAF50' }} />
+                </Box>
+              </Box>
+              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#757575', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Present Today
+              </Typography>
             </Box>
-            <Typography sx={{ color: '#999999', fontSize: '13px', fontWeight: 500, mb: 1, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              On Leave
-            </Typography>
-            <Typography sx={{ fontSize: '32px', fontWeight: 700, color: '#212121' }}>
-              {todayAttendanceStats.onLeave}
-            </Typography>
-          </MotionBox>
-        </Grid>
+          </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <MotionBox
-            component={Paper}
-            sx={{
-              p: 3,
-              textAlign: 'center',
-              background: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1px solid #E0E0E0',
+          <Grid item xs={12} sm={6} md={3}>
+            <Box sx={{ 
+              p: 3, 
+              borderRight: { xs: 'none', md: '1px solid #F0F0F5' },
+              borderBottom: { xs: '1px solid #F0F0F5', sm: '1px solid #F0F0F5', md: 'none' },
               transition: 'all 0.3s ease',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-                borderColor: '#F44336',
+                background: 'rgba(255, 152, 0, 0.02)',
               }
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              width: 56,
-              height: 56,
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #F44336 0%, #EF5350 100%)',
-              margin: '0 auto 16px',
-              boxShadow: '0 4px 12px rgba(244, 67, 54, 0.2)',
             }}>
-              <TrendingDownIcon sx={{ fontSize: 28, color: '#FFFFFF' }} />
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ 
+                  width: 48, 
+                  height: 48, 
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #FF9800 0%, #FFB74D 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 16px rgba(255, 152, 0, 0.25)',
+                }}>
+                  <EventAvailableIcon sx={{ fontSize: 24, color: '#FFFFFF' }} />
+                </Box>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#212121', lineHeight: 1 }}>
+                    {todayAttendanceStats.onLeave}
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#757575', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                On Leave
+              </Typography>
             </Box>
-            <Typography sx={{ color: '#999999', fontSize: '13px', fontWeight: 500, mb: 1, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Absent Today
-            </Typography>
-            <Typography sx={{ fontSize: '32px', fontWeight: 700, color: '#212121' }}>
-              {todayAttendanceStats.absent}
-            </Typography>
-          </MotionBox>
-        </Grid>
-      </Grid>
+          </Grid>
 
-      {/* Two Column Layout for Team and Assets */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Box sx={{ 
+              p: 3,
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                background: 'rgba(244, 67, 54, 0.02)',
+              }
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ 
+                  width: 48, 
+                  height: 48, 
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #F44336 0%, #EF5350 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 16px rgba(244, 67, 54, 0.25)',
+                }}>
+                  <TrendingDownIcon sx={{ fontSize: 24, color: '#FFFFFF' }} />
+                </Box>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#212121', lineHeight: 1 }}>
+                    {todayAttendanceStats.absent}
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#757575', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Absent Today
+              </Typography>
+            </Box>
+          </Grid>
+        </Grid>
+      </MotionBox>
+
+      {/* Two Column Layout: Team Overview (Left) & Calendar (Right) */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Team Overview Section */}
+        {/* Team Overview Section - Left Column */}
         {meDetails?.direct_reports && meDetails.direct_reports.length > 0 && (
           <Grid item xs={12} lg={6}>
             <MotionBox component={Paper} sx={{
               p: 3,
               background: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1px solid #E0E0E0',
-              height: '100%',
+              borderRadius: '16px',
+              border: '1px solid #E8E8F0',
+              height: '480px',
+              display: 'flex',
+              flexDirection: 'column',
               transition: 'all 0.3s ease',
               '&:hover': {
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-                borderColor: '#5A3FFF',
+                boxShadow: '0 12px 40px rgba(90, 63, 255, 0.08)',
               }
             }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2.5 }}>
@@ -585,9 +671,26 @@ const AdminDashboard = () => {
                 </Box>
                 <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#212121' }}>Team Overview</Typography>
               </Box>
-              <List sx={{ p: 0 }}>
-                {meDetails.direct_reports.map((report: any, index: number) => (
-                  <ListItem 
+              <Box sx={{ 
+                flexGrow: 1,
+                overflow: 'auto',
+                '&::-webkit-scrollbar': {
+                  width: '6px',
+                },
+                '&::-webkit-scrollbar-track': {
+                  background: '#F5F5F5',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: '#D0D0D0',
+                  borderRadius: '3px',
+                  '&:hover': {
+                    background: '#B0B0B0',
+                  },
+                },
+              }}>
+                <List sx={{ p: 0 }}>
+                  {meDetails.direct_reports.map((report: any, index: number) => (
+                    <ListItem 
                     key={report.employee_id} 
                     divider={index !== meDetails.direct_reports.length - 1}
                     sx={{ 
@@ -619,24 +722,188 @@ const AdminDashboard = () => {
                     />
                   </ListItem>
                 ))}
-              </List>
+                </List>
+              </Box>
             </MotionBox>
           </Grid>
         )}
 
+        {/* Calendar Section - Right Column */}
+        <Grid item xs={12} lg={6}>
+          <MotionBox
+            component={Paper}
+            sx={{
+              p: 3,
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E8E8F0',
+              height: '480px',
+              display: 'flex',
+              flexDirection: 'column',
+              transition: 'all 0.3s ease',
+              overflow: 'hidden',
+              '&:hover': {
+                boxShadow: '0 12px 40px rgba(90, 63, 255, 0.08)',
+              }
+            }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+          >
+            {/* Calendar Header */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexShrink: 0 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
+                }}>
+                  <CalendarTodayIcon sx={{ fontSize: 20, color: '#FFFFFF' }} />
+                </Box>
+                <Typography sx={{ fontSize: '16px', fontWeight: 600, color: '#212121' }}>
+                  Calendar
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton 
+                  size="small" 
+                  onClick={handlePrevMonth} 
+                  sx={{ 
+                    border: '1px solid #E8E8F0',
+                    borderRadius: '8px',
+                    color: '#5A3FFF',
+                    '&:hover': { 
+                      background: 'rgba(90, 63, 255, 0.08)',
+                      borderColor: '#5A3FFF',
+                    }
+                  }}
+                >
+                  <ChevronLeftIcon sx={{ fontSize: 20, color: '#5A3FFF' }} />
+                </IconButton>
+                <IconButton 
+                  size="small" 
+                  onClick={handleNextMonth} 
+                  sx={{ 
+                    border: '1px solid #E8E8F0',
+                    borderRadius: '8px',
+                    color: '#5A3FFF',
+                    '&:hover': { 
+                      background: 'rgba(90, 63, 255, 0.08)',
+                      borderColor: '#5A3FFF',
+                    }
+                  }}
+                >
+                  <ChevronRightIcon sx={{ fontSize: 20, color: '#5A3FFF' }} />
+                </IconButton>
+              </Box>
+            </Box>
+
+            {/* Month/Year Display */}
+            <Box sx={{ 
+              textAlign: 'center', 
+              mb: 1.5, 
+              py: 1,
+              background: 'linear-gradient(135deg, rgba(90, 63, 255, 0.05) 0%, rgba(90, 63, 255, 0.02) 100%)',
+              borderRadius: '10px',
+            }}>
+              <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#5A3FFF' }}>
+                {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </Typography>
+            </Box>
+
+            {/* Day Headers */}
+            <Grid container spacing={0.5} sx={{ mb: 0.5 }}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                <Grid item xs={12/7} key={index}>
+                  <Box sx={{ textAlign: 'center', py: 0.5 }}>
+                    <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#999999', textTransform: 'uppercase' }}>
+                      {day}
+                    </Typography>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+
+            {/* Calendar Days */}
+            <Grid container spacing={0.5}>
+              {(() => {
+                const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentDate);
+                const days = [];
+                const today = new Date();
+                const isCurrentMonth = 
+                  currentDate.getMonth() === today.getMonth() && 
+                  currentDate.getFullYear() === today.getFullYear();
+
+                // Empty cells for days before month starts
+                for (let i = 0; i < startingDayOfWeek; i++) {
+                  days.push(
+                    <Grid item xs={12/7} key={`empty-${i}`}>
+                      <Box sx={{ height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                    </Grid>
+                  );
+                }
+
+                // Days of the month
+                for (let day = 1; day <= daysInMonth; day++) {
+                  const isToday = isCurrentMonth && day === today.getDate();
+                  days.push(
+                    <Grid item xs={12/7} key={day}>
+                      <Box
+                        sx={{
+                          height: '42px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '8px',
+                          background: isToday 
+                            ? 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)' 
+                            : 'transparent',
+                          color: isToday ? '#FFFFFF' : '#212121',
+                          fontSize: '12px',
+                          fontWeight: isToday ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          border: isToday ? '2px solid transparent' : '1px solid transparent',
+                          '&:hover': {
+                            background: isToday 
+                              ? 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)' 
+                              : 'rgba(90, 63, 255, 0.08)',
+                            borderColor: isToday ? 'transparent' : '#E8E8F0',
+                            transform: 'scale(1.05)',
+                          }
+                        }}
+                      >
+                        {day}
+                      </Box>
+                    </Grid>
+                  );
+                }
+
+                return days;
+              })()}
+            </Grid>
+          </MotionBox>
+        </Grid>
+      </Grid>
+
+      {/* Assets Section */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         {/* My Assets Section */}
         {myAssets && myAssets.length > 0 && (
-          <Grid item xs={12} lg={meDetails?.direct_reports && meDetails.direct_reports.length > 0 ? 6 : 12}>
+          <Grid item xs={12} lg={6}>
             <MotionBox component={Paper} sx={{
               p: 3,
               background: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1px solid #E0E0E0',
+              borderRadius: '16px',
+              border: '1px solid #E8E8F0',
               height: '100%',
               transition: 'all 0.3s ease',
               '&:hover': {
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-                borderColor: '#5A3FFF',
+                boxShadow: '0 12px 40px rgba(90, 63, 255, 0.08)',
               }
             }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2.5 }}>
@@ -688,12 +955,11 @@ const AdminDashboard = () => {
           p: 3,
           mb: 4,
           background: '#FFFFFF',
-          borderRadius: '12px',
-          border: '1px solid #E0E0E0',
+          borderRadius: '16px',
+          border: '1px solid #E8E8F0',
           transition: 'all 0.3s ease',
           '&:hover': {
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-            borderColor: '#5A3FFF',
+            boxShadow: '0 12px 40px rgba(90, 63, 255, 0.08)',
           }
         }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.6 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2.5 }}>
@@ -739,114 +1005,330 @@ const AdminDashboard = () => {
 
       {/* Employee Roster Title and Button */}
       {can("employee:read_all") && (
-        <>
-            <MotionBox 
-              sx={{ 
+        <MotionBox
+          component={Paper}
+          sx={{
+            p: 3,
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E8E8F0',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: '0 12px 40px rgba(90, 63, 255, 0.08)',
+            }
+          }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.7 }}
+        >
+          {/* Header */}
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            mb: 2.5,
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Box sx={{ 
                 display: 'flex', 
                 alignItems: 'center', 
-                justifyContent: 'space-between', 
-                mb: 2,
-              }} 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              transition={{ duration: 0.5, delay: 0.7 }}
-            >
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    width: 36,
-                    height: 36,
-                    borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
-                    mr: 1.5,
-                  }}>
-                    <GroupIcon sx={{ fontSize: 20, color: '#FFFFFF' }} />
-                  </Box>
-                  <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#212121' }}>
-                    Employee Roster
-                  </Typography>
-                </Box>
-                {can("employee:create") && (
-                    <Button 
-                      variant="contained" 
-                      startIcon={<AddIcon />} 
-                      onClick={() => navigate('/admin/employees/new')} 
-                      sx={{
-                        background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
-                        borderRadius: '8px',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        px: 3,
-                        boxShadow: '0 4px 12px rgba(90, 63, 255, 0.3)',
-                        '&:hover': {
-                          boxShadow: '0 6px 20px rgba(90, 63, 255, 0.4)',
-                          transform: 'translateY(-2px)',
-                        }
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
+                mr: 1.5,
+              }}>
+                <GroupIcon sx={{ fontSize: 20, color: '#FFFFFF' }} />
+              </Box>
+              <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#212121' }}>
+                Employee Roster
+              </Typography>
+            </Box>
+            {can("employee:create") && (
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={() => navigate('/admin/employees/new')} 
+                sx={{
+                  background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  px: 3,
+                  boxShadow: '0 4px 12px rgba(90, 63, 255, 0.3)',
+                  '&:hover': {
+                    boxShadow: '0 6px 20px rgba(90, 63, 255, 0.4)',
+                    transform: 'translateY(-2px)',
+                  }
+                }}
+              >
+                Add Employee
+              </Button>
+            )}
+          </Box>
+
+          {/* Employee Roster List */}
+          <Box>
+            {/* Table Header */}
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: '120px 60px 1fr 1fr 140px 140px 100px',
+              gap: 2,
+              px: 2,
+              py: 1.5,
+              backgroundColor: '#FAFAFA',
+              borderRadius: '8px 8px 0 0',
+              mb: 0,
+            }}>
+              <Box 
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                onClick={() => handleSort('employee_id')}
+              >
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                  Employee ID
+                </Typography>
+                {sortField === 'employee_id' ? (
+                  sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                ) : (
+                  <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                )}
+              </Box>
+              <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                
+              </Typography>
+              <Box 
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                onClick={() => handleSort('name')}
+              >
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                  Name
+                </Typography>
+                {sortField === 'name' ? (
+                  sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                ) : (
+                  <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                )}
+              </Box>
+              <Box 
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                onClick={() => handleSort('job_title')}
+              >
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                  Job Title
+                </Typography>
+                {sortField === 'job_title' ? (
+                  sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                ) : (
+                  <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                )}
+              </Box>
+              <Box 
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                onClick={() => handleSort('department')}
+              >
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                  Department
+                </Typography>
+                {sortField === 'department' ? (
+                  sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                ) : (
+                  <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                )}
+              </Box>
+              <Box 
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                onClick={() => handleSort('reports_to')}
+              >
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                  Reports To
+                </Typography>
+                {sortField === 'reports_to' ? (
+                  sortOrder === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} /> : <ArrowDownwardIcon sx={{ fontSize: 14, color: '#5A3FFF' }} />
+                ) : (
+                  <UnfoldMoreIcon sx={{ fontSize: 14, color: '#CCCCCC' }} />
+                )}
+              </Box>
+              <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666666', textTransform: 'uppercase' }}>
+                Actions
+              </Typography>
+            </Box>
+
+            {/* Employee List */}
+            <Box>
+              {paginatedEmployees && paginatedEmployees.length > 0 ? (
+                paginatedEmployees.map((employee: any, index: number) => (
+                  <Box
+                    key={employee.employee_id}
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: '120px 60px 1fr 1fr 140px 140px 100px',
+                      gap: 2,
+                      px: 2,
+                      py: 2,
+                      backgroundColor: '#FFFFFF',
+                      borderBottom: '1px solid #F0F0F0',
+                      alignItems: 'center',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: '#F8F9FA',
+                      }
+                    }}
+                  >
+                    {/* Employee ID */}
+                    <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#5A3FFF' }}>
+                      {employee.employee_id}
+                    </Typography>
+
+                    {/* Avatar */}
+                    <Avatar 
+                      src={employee.photo_url ? `${API_BASE_URL}${employee.photo_url}` : undefined}
+                      sx={{ 
+                        width: 40, 
+                        height: 40,
+                        border: '2px solid #E8E8F0',
                       }}
                     >
-                      Add Employee
-                    </Button>
-                )}
-            </MotionBox>
+                      {employee.first_name?.[0]}{employee.last_name?.[0]}
+                    </Avatar>
 
-            {/* Employee Roster DataGrid */}
-            <MotionBox sx={{ 
-              width: '100%',
-              maxWidth: '100%',
-              overflow: 'auto',
-            }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.8 }}>
-                <DataGrid
-                    rows={employees || []}
-                    columns={columns}
-                    getRowId={(row) => row.employee_id}
-                    density="comfortable"
-                    autoHeight
-                    initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 }}}}
-                    pageSizeOptions={[10, 25, 50]}
-                    loading={deleteMutation.isPending}
+                    {/* Name */}
+                    <Box>
+                      <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#212121' }}>
+                        {employee.first_name} {employee.last_name}
+                      </Typography>
+                      <Typography sx={{ fontSize: '12px', color: '#999999', mt: 0.2 }}>
+                        {employee.email}
+                      </Typography>
+                    </Box>
+
+                    {/* Job Title */}
+                    <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#666666' }}>
+                      {employee.job_title || 'N/A'}
+                    </Typography>
+
+                    {/* Department */}
+                    <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#666666' }}>
+                      {employee.department || 'N/A'}
+                    </Typography>
+
+                    {/* Reports To */}
+                    <Typography sx={{ fontSize: '13px', color: '#666666' }}>
+                      {employeeMap.get(employee.reports_to) || employee.reports_to || 'N/A'}
+                    </Typography>
+
+                    {/* Actions */}
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {can("employee:update") && (
+                        <IconButton
+                          size="small"
+                          onClick={() => navigate(`/admin/employees/edit/${employee.employee_id}`)}
+                          sx={{
+                            color: '#5A3FFF',
+                            '&:hover': {
+                              backgroundColor: 'rgba(90, 63, 255, 0.08)',
+                            }
+                          }}
+                        >
+                          <EditIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      )}
+                      {can("employee:delete") && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDelete(employee.employee_id, `${employee.first_name} ${employee.last_name}`)}
+                          sx={{
+                            color: '#F44336',
+                            '&:hover': {
+                              backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                            }
+                          }}
+                        >
+                          <DeleteIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      )}
+                    </Box>
+                  </Box>
+                ))
+              ) : (
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  py: 8,
+                  color: '#999999',
+                }}>
+                  <Typography sx={{ fontSize: '14px' }}>
+                    No employees found
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            {/* Pagination Controls */}
+            <Box sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mt: 2,
+              pt: 2,
+              borderTop: '1px solid #F0F0F0',
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography sx={{ fontSize: '13px', color: '#666666' }}>
+                  Rows per page:
+                </Typography>
+                <FormControl size="small">
+                  <Select
+                    value={pageSize}
+                    onChange={handlePageSizeChange}
                     sx={{
-                      minWidth: '100%',
-                      border: 'none',
-                      backgroundColor: 'transparent',
-                      '& .MuiDataGrid-cell': {
-                        borderColor: '#F0F0F0',
-                        py: 1.5,
+                      fontSize: '13px',
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#E8E8F0',
                       },
-                      '& .MuiDataGrid-columnHeaders': {
-                        backgroundColor: 'transparent',
-                        borderBottom: '2px solid #E0E0E0',
-                        borderTop: 'none',
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#5A3FFF',
                       },
-                      '& .MuiDataGrid-columnHeaderTitle': {
-                        fontWeight: 700,
-                        color: '#212121',
-                        fontSize: '13px',
-                      },
-                      '& .MuiDataGrid-row': {
-                        backgroundColor: 'transparent',
-                        '&:hover': {
-                          backgroundColor: '#F8F9FA',
-                        },
-                        '&.Mui-selected': {
-                          backgroundColor: 'rgba(90, 63, 255, 0.04)',
-                          '&:hover': {
-                            backgroundColor: 'rgba(90, 63, 255, 0.08)',
-                          }
-                        }
-                      },
-                      '& .MuiDataGrid-footerContainer': {
-                        borderTop: '1px solid #E0E0E0',
-                        backgroundColor: 'transparent',
-                      },
-                      '& .MuiDataGrid-virtualScroller': {
-                        backgroundColor: 'transparent',
-                      },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#5A3FFF',
+                      }
                     }}
-                />
-            </MotionBox>
-        </>
+                  >
+                    <MenuItem value={10}>10</MenuItem>
+                    <MenuItem value={25}>25</MenuItem>
+                    <MenuItem value={50}>50</MenuItem>
+                  </Select>
+                </FormControl>
+                <Typography sx={{ fontSize: '13px', color: '#666666', ml: 2 }}>
+                  {page * pageSize + 1}-{Math.min((page + 1) * pageSize, sortedEmployees.length)} of {sortedEmployees.length}
+                </Typography>
+              </Box>
+
+              <Pagination 
+                count={totalPages} 
+                page={page + 1} 
+                onChange={handlePageChange}
+                color="primary"
+                shape="rounded"
+                sx={{
+                  '& .MuiPaginationItem-root': {
+                    color: '#666666',
+                    fontWeight: 500,
+                    '&.Mui-selected': {
+                      backgroundColor: '#5A3FFF',
+                      color: '#FFFFFF',
+                      '&:hover': {
+                        backgroundColor: '#4A2FEF',
+                      }
+                    },
+                    '&:hover': {
+                      backgroundColor: 'rgba(90, 63, 255, 0.08)',
+                    }
+                  }
+                }}
+              />
+            </Box>
+          </Box>
+        </MotionBox>
       )}
 
       {/* --- Snackbar for Notifications --- */}

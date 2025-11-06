@@ -2,21 +2,21 @@
 import { Box, Typography, List, ListItemButton, ListItemIcon, ListItemText, Avatar, Menu, MenuItem } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MotionBox } from './Motion';
-import { 
-  MdDashboard, 
-  MdSecurity, 
-  MdEventNote, 
-  MdInventory, 
-  MdBarChart, 
-  MdPayment, 
-  MdRateReview, 
-  MdSchool,
-  MdArrowDropDown,
-  MdPerson,
-  MdLogout
-} from 'react-icons/md';
+import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
+import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import { useState } from 'react';
 import { useAuth } from '../hooks/hooks/useAuth';
+import { API_BASE_URL } from '../services/api';
+import logoImage from '../assets/logo.svg';
 
 interface MenuItemType {
   title: string;
@@ -32,14 +32,14 @@ const AdminSidebar = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const menuItems: MenuItemType[] = [
-    { title: 'Dashboard', path: '/admin/dashboard', icon: <MdDashboard size={20} /> },
-    { title: 'Manage Roles', path: '/admin/manage-roles', icon: <MdSecurity size={20} />, permission: 'role:manage' },
-    { title: 'Manage Leaves', path: '/admin/manage-leaves', icon: <MdEventNote size={20} />, permission: 'leave:read_all' },
-    { title: 'Manage Assets', path: '/admin/manage-assets', icon: <MdInventory size={20} />, permission: 'asset:read_all' },
-    { title: 'Attendance Report', path: '/admin/attendance-report', icon: <MdBarChart size={20} />, permission: 'employee:read_all' },
-    { title: 'Manage Payroll', path: '/admin/manage-payroll', icon: <MdPayment size={20} />, permission: 'payroll:read_all' },
-    { title: 'Performance Reviews', path: '/admin/manage-performance-reviews', icon: <MdRateReview size={20} />, permission: 'performance:read_all' },
-    { title: 'Employee Skills', path: '/admin/manage-employee-skills', icon: <MdSchool size={20} />, permission: 'skill:read_all' },
+    { title: 'Dashboard', path: '/admin/dashboard', icon: <DashboardOutlinedIcon sx={{ fontSize: 22 }} /> },
+    { title: 'Manage Roles', path: '/admin/manage-roles', icon: <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 22 }} />, permission: 'role:manage' },
+    { title: 'Manage Leaves', path: '/admin/manage-leaves', icon: <EventNoteOutlinedIcon sx={{ fontSize: 22 }} />, permission: 'leave:read_all' },
+    { title: 'Manage Assets', path: '/admin/manage-assets', icon: <InventoryOutlinedIcon sx={{ fontSize: 22 }} />, permission: 'asset:read_all' },
+    { title: 'Attendance Report', path: '/admin/attendance-report', icon: <AssessmentOutlinedIcon sx={{ fontSize: 22 }} />, permission: 'employee:read_all' },
+    { title: 'Manage Payroll', path: '/admin/manage-payroll', icon: <AccountBalanceWalletOutlinedIcon sx={{ fontSize: 22 }} />, permission: 'payroll:read_all' },
+    { title: 'Performance Reviews', path: '/admin/manage-performance-reviews', icon: <RateReviewOutlinedIcon sx={{ fontSize: 22 }} />, permission: 'performance:read_all' },
+    { title: 'Employee Skills', path: '/admin/manage-employee-skills', icon: <SchoolOutlinedIcon sx={{ fontSize: 22 }} />, permission: 'skill:read_all' },
   ];
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path);
@@ -53,7 +53,7 @@ const AdminSidebar = () => {
   };
 
   const handleEditProfile = () => {
-    navigate('/app/profile');
+    navigate('/admin/profile');
     handleClose();
   };
 
@@ -74,21 +74,23 @@ const AdminSidebar = () => {
         position: 'fixed',
         left: 0,
         top: 0,
-        overflowY: 'auto',
-        overflowX: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
         zIndex: 100,
         borderRight: '1px solid #E0E0E0',
+        overflowY: 'auto',
+        overflowX: 'hidden',
         '&::-webkit-scrollbar': {
           width: '6px',
         },
         '&::-webkit-scrollbar-track': {
-          background: 'rgba(0, 0, 0, 0.05)',
+          background: '#F5F5F5',
         },
         '&::-webkit-scrollbar-thumb': {
-          background: 'rgba(90, 63, 255, 0.4)',
+          background: '#D0D0D0',
           borderRadius: '3px',
           '&:hover': {
-            background: 'rgba(90, 63, 255, 0.6)',
+            background: '#B0B0B0',
           },
         },
       }}
@@ -98,47 +100,21 @@ const AdminSidebar = () => {
         sx={{
           p: 3,
           borderBottom: '1px solid #E0E0E0',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              background: 'linear-gradient(135deg, #5A3FFF 0%, #7D5BFF 100%)',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              color: 'white',
-              mr: 2,
-            }}
-          >
-            DE
-          </Box>
-          <Box>
-            <Typography
-              sx={{
-                color: '#212121',
-                fontSize: '16px',
-                fontWeight: 700,
-              }}
-            >
-              DUMMYEMS
-            </Typography>
-            <Typography
-              sx={{
-                color: '#999999',
-                fontSize: '11px',
-                fontWeight: 400,
-              }}
-            >
-              Admin Dashboard
-            </Typography>
-          </Box>
-        </Box>
+        <Box
+          component="img"
+          src={logoImage}
+          alt="Company Logo"
+          sx={{
+            width: '90%',
+            height: 'auto',
+            objectFit: 'contain',
+          }}
+        />
       </Box>
 
       {/* Navigation Items */}
@@ -199,17 +175,12 @@ const AdminSidebar = () => {
         </List>
       </Box>
 
-      <Box sx={{ flexGrow: 1 }} />
-
       {/* User Profile Section */}
       <Box
         sx={{
+          mt: 'auto',
           p: 2,
           borderTop: '1px solid #E0E0E0',
-          position: 'absolute',
-          bottom: 40,
-          width: '100%',
-          background: '#FFFFFF',
         }}
       >
         <Box
@@ -227,7 +198,8 @@ const AdminSidebar = () => {
           }}
         >
           <Avatar 
-            sx={{ width: 36, height: 36, mr: 1.5, bgcolor: '#5A3FFF' }}
+            src={user?.employee_id ? `${API_BASE_URL}/static/images/${user.employee_id}.jpg` : undefined}
+            sx={{ width: 40, height: 40, mr: 1.5, bgcolor: '#5A3FFF' }}
           >
             {user?.employee_id?.[0]?.toUpperCase() || 'A'}
           </Avatar>
@@ -236,10 +208,10 @@ const AdminSidebar = () => {
               {user?.employee_id || 'Admin'}
             </Typography>
             <Typography sx={{ fontSize: '11px', color: '#999999' }}>
-              Administrator
+              View Profile
             </Typography>
           </Box>
-          <MdArrowDropDown size={20} color="#666666" />
+          <KeyboardArrowDownIcon sx={{ fontSize: 20, color: '#666666' }} />
         </Box>
         
         <Menu
@@ -254,43 +226,27 @@ const AdminSidebar = () => {
             vertical: 'bottom',
             horizontal: 'right',
           }}
+          PaperProps={{
+            sx: {
+              borderRadius: '8px',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+              mt: -1,
+            }
+          }}
         >
-          <MenuItem onClick={handleEditProfile}>
+          <MenuItem onClick={handleEditProfile} sx={{ py: 1.5, px: 2 }}>
             <ListItemIcon>
-              <MdPerson size={20} />
+              <PersonOutlineIcon sx={{ fontSize: 20 }} />
             </ListItemIcon>
             <ListItemText>Edit Profile</ListItemText>
           </MenuItem>
-          <MenuItem onClick={handleLogout}>
+          <MenuItem onClick={handleLogout} sx={{ py: 1.5, px: 2 }}>
             <ListItemIcon>
-              <MdLogout size={20} />
+              <LogoutOutlinedIcon sx={{ fontSize: 20 }} />
             </ListItemIcon>
             <ListItemText>Logout</ListItemText>
           </MenuItem>
         </Menu>
-      </Box>
-
-      {/* Footer Info */}
-      <Box
-        sx={{
-          p: 2,
-          textAlign: 'center',
-          position: 'absolute',
-          bottom: 0,
-          width: '100%',
-          borderTop: '1px solid #E0E0E0',
-          background: '#FFFFFF',
-        }}
-      >
-        <Typography
-          sx={{
-            fontSize: '11px',
-            color: '#999999',
-            fontWeight: 400,
-          }}
-        >
-          © 2025 DUMMYEMS
-        </Typography>
       </Box>
     </MotionBox>
   );
